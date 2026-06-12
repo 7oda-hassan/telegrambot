@@ -1,138 +1,68 @@
-# Production Deployment Guide
+# Deployment Guide
 
-This guide outlines the recommended steps for deploying the Telegram Rich Markdown Bot to a Linux Virtual Private Server (VPS) for long-term production execution.
+This document explains how to securely deploy the Telegram Rich Markdown Bot to production environments, specifically focusing on cloud PaaS providers like **Railway** and traditional VPS environments using **Docker**.
 
-## 1. Prerequisites
+## 1. Environment Configuration
 
-- A Linux-based VPS (Ubuntu 20.04/22.04 or Debian recommended).
-- Root or `sudo` access.
-- Python 3.11+ installed.
-- Git.
+All sensitive configurations must be injected via Environment Variables.
 
-## 2. Prepare the Environment
+Create a `.env` file or provide these variables in your deployment dashboard:
 
-1. **Clone the Repository:**
+```env
+BOT_TOKEN=123456789:YOUR_SECRET_TOKEN
+OWNER_ID=123456789
+LOG_LEVEL=INFO
+```
+
+*Note: The bot will fail fast and exit immediately on startup if `BOT_TOKEN` or `OWNER_ID` are missing or improperly formatted.*
+
+---
+
+## 2. Railway Deployment (Recommended)
+
+Railway is the easiest way to deploy this bot, as the repository is pre-configured with a `Procfile` and standard Python packaging.
+
+1. Create a Railway account and link your GitHub account.
+2. Click **New Project** -> **Deploy from GitHub repo**.
+3. Select this repository.
+4. Railway will begin building. It will likely fail initially because of missing variables.
+5. Go to the **Variables** tab in your Railway project.
+6. Add `BOT_TOKEN` and `OWNER_ID`.
+7. Railway will automatically redeploy the bot.
+8. Check the **Logs** tab. You should see `Starting Telegram Bot...` followed by `Bot is polling...`.
+
+---
+
+## 3. Docker Compose Deployment (VPS / Self-Hosted)
+
+If you are hosting this on a Linux VPS (e.g. DigitalOcean, Linode, AWS EC2), you can use the provided Docker setup.
+
+1. Ensure Docker and Docker Compose are installed on your server.
+2. Clone the repository:
    ```bash
-   git clone https://github.com/your-repo/telegram-rich-markdown-bot.git
-   cd telegram-rich-markdown-bot
+   git clone https://github.com/your-username/telegrambot.git
+   cd telegrambot
    ```
-
-2. **Create a Virtual Environment:**
-   It is highly recommended to isolate dependencies.
-   ```bash
-   python3 -m venv venv
-   source venv/bin/activate
-   ```
-
-3. **Install Dependencies:**
-   ```bash
-   pip install --upgrade pip
-   pip install -r requirements.txt
-   ```
-
-## 3. Configuration
-
-1. Create the environment variable file.
-   ```bash
-   cp .env.example .env
-   ```
-2. Securely edit `.env` using your preferred editor (e.g., `nano .env`) and set your required tokens.
-   ```env
-   BOT_TOKEN=123456789:YOUR_PRODUCTION_BOT_TOKEN_HERE
-   ```
-
-## 4. Process Management (Systemd)
-
-To ensure the bot runs continuously, survives server reboots, and automatically restarts upon crashes, you must register it as a Systemd service.
-
-1. **Create the Service File:**
-   ```bash
-   sudo nano /etc/systemd/system/telegram-bot.service
-   ```
-
-2. **Paste the following configuration:**
-   *(Ensure you replace `/path/to/project` and `your_user` with your actual directory and username)*
-   ```ini
-   [Unit]
-   Description=Telegram Rich Markdown Bot
-   After=network.target
-
-   [Service]
-   User=your_user
-   Group=your_user
-   WorkingDirectory=/path/to/project
-   Environment="PATH=/path/to/project/venv/bin"
-   ExecStart=/path/to/project/venv/bin/python main.py
-   Restart=always
-   RestartSec=5
-
-   [Install]
-   WantedBy=multi-user.target
-   ```
-
-3. **Enable and Start the Service:**
-   ```bash
-   sudo systemctl daemon-reload
-   sudo systemctl enable telegram-bot
-   sudo systemctl start telegram-bot
-   ```
-
-## 5. Docker Deployment (Containerized)
-
-If you prefer containerization, this repository includes a production-ready `Dockerfile` and `docker-compose.yml`.
-
-### Using Docker Compose (Recommended)
-
-This is the easiest and most reliable method to deploy the bot on any server.
-
-1. **Configure Environment:**
+3. Copy the environment template:
    ```bash
    cp .env.example .env
-   # Edit .env and insert your BOT_TOKEN
+   nano .env # Insert your BOT_TOKEN and OWNER_ID
    ```
-
-2. **Start the Bot in the Background:**
+4. Build and start the container in the background:
    ```bash
    docker-compose up -d --build
    ```
-
-3. **View Logs:**
+5. View logs to confirm startup:
    ```bash
    docker-compose logs -f
    ```
 
-4. **Stop the Bot:**
-   ```bash
-   docker-compose down
-   ```
+---
 
-### Using Raw Docker
+## 4. Production Database Strategy
 
-If you aren't using `docker-compose`, you can build and run the image manually.
+The bot utilizes a lightweight `SQLite3` database to store Channels, Admins, and Drafts. 
+The database is automatically generated inside the `data/` directory (`data/bot_database.sqlite`). 
 
-1. **Build the image:**
-   ```bash
-   docker build -t telegram-rich-bot .
-   ```
-
-2. **Run the container:**
-   ```bash
-   docker run -d --name rich-bot --env-file .env -v $(pwd)/logs:/app/logs telegram-rich-bot
-   ```
-
-## 6. Logging & Monitoring
-
-The bot uses the native Python `logging` module configured for production environments. Errors and Warnings are piped directly to Standard Out, and rotating log files are saved to the `logs/` directory.
-
-**To view live production logs (Systemd):**
-```bash
-sudo journalctl -u telegram-bot -f
-```
-
-**To restart the bot after code updates (Systemd):**
-```bash
-git pull
-source venv/bin/activate
-pip install -r requirements.txt
-sudo systemctl restart telegram-bot
-```
+**Important Note for PaaS (Railway/Heroku):**
+If you deploy to a serverless or ephemeral file system, the SQLite database might reset between redeployments. For Railway, ensure you attach a **Volume** to the `/app/data` directory inside the service settings to make the database persistent!

@@ -1,5 +1,8 @@
 import os
 import importlib
+import logging
+
+logger = logging.getLogger("telegram_bot.parsers.plugin_loader")
 import pkgutil
 
 def load_all_plugins():
@@ -16,4 +19,4 @@ def load_all_plugins():
             try:
                 importlib.import_module(f"{base_pkg}.{pkg}.{module_name}")
             except Exception as e:
-                print(f"Failed to load plugin {module_name}: {e}")
+                logger.error(f"Failed to load plugin {module_name}: {e}")

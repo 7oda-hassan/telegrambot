@@ -1,45 +1,40 @@
-# Architecture Documentation
+# System Architecture
 
-The Telegram Rich Markdown Bot relies heavily on strict Clean Architecture paradigms. The core business logic (parsing, DOM building, and formatting) operates entirely decoupled from external frameworks (Aiogram/Telegram API). 
+This project follows a strict **Clean Architecture** approach. It is heavily modularized to decouple the Telegram specific API layers from the core business logic, markdown parsing, and formatting engines.
 
-## 1. Request Flow (Message Processing)
+## 1. Directory Structure
 
-When a message is received by Telegram, the flow travels from the outermost handler layer down into the core domain layer, and finally compiles back out to the Telegram API.
+- `main.py`: The application entry point. Initializes databases, verifies environment variables, and starts polling.
+- `bot/`: The Delivery mechanism (Controller layer).
+  - `bot/handlers/`: Contains isolated command and event handlers (`session_handler`, `checklist_handler`, `menu_handler`, `channel_management_handler`, `publish_handler`).
+  - `bot/middlewares/`: Security and error boundaries (`auth.py`, `error_middleware.py`).
+  - `bot/services/`: Connects the Telegram handlers to the Database and external parsers.
+- `parsers/`: The Core Business Logic for interpreting raw text.
+  - Generates a modular Abstract Syntax Tree (AST) using plugins.
+- `formatters/`: The Presentation Logic.
+  - Converts the generated AST directly into Telegram's native formatting syntax.
+- `core/`: Constants and base Exceptions.
+- `data/`: Local storage for the SQLite database.
 
-1. **Aiogram Dispatcher (`main.py`)**: Boots up the application and attaches routers and global error handling middlewares.
-2. **Error Middleware (`error_middleware.py`)**: Intercepts the request. It traps exceptions, ensures users receive a graceful fallback message (`An unexpected system error occurred`), and strictly suppresses internal stack traces.
-3. **Handler Layer (`checklist_handler.py`)**: Receives the raw Telegram API `Message` object. It contains zero parsing logic and delegates directly to the Application Service layer.
-4. **Service Layer (`message_service.py`)**: Acts as the orchestrator. It receives the raw text and Telegram's native entities, invokes the parser, and forwards the AST to the formatter.
-5. **API Layer (`send_rich_message.py`)**: Because `aiogram` does not currently expose the native `sendRichMessage` endpoint, a custom payload wrapper handles the transmission of the compiled markdown directly back to Telegram's backend.
-   *(Note: The handler also includes an automatic fallback that seamlessly strips invalid embedded URLs if Telegram rejects the markdown payload due to `RICH_MESSAGE_PHOTO_URL_INVALID`).*
+## 2. The Abstract Syntax Tree (AST) Pipeline
 
-## 2. Parsing Pipeline
+The bot's markdown capability is powered by a custom AST pipeline.
 
-The parsing pipeline translates a flat Telegram message into a fully nested Abstract Syntax Tree (AST). The parser strictly prioritizes native Telegram Entities.
+1. **Tokenization & Parsing (`parsers/`)**: The raw text message is broken down by the `ParserFactory` and `PluginLoader` into abstract mathematical nodes (e.g. `TaskNode`, `BoldNode`, `ParagraphNode`).
+2. **Formatting (`formatters/`)**: The `TelegramRichMessageFormatter` traverses this tree of nodes recursively, appending the exact Markdown characters required by Telegram's `sendRichMessage` payload.
+3. **Delivery (`bot/`)**: The formatted payload is dispatched back to the user via Aiogram.
 
-### A. Entity AST Builder (`entity_builder.py`)
-This is the primary parser engine.
-- Telegram's payloads deliver `entities` which use **UTF-16 Code Unit** offsets.
-- The `EntityASTBuilder` rigidly decodes the raw text into a `utf-16-le` byte array, flawlessly slicing the byte strings using Telegram's exact bounds. This absolutely prevents "off-by-one" offset drifting caused by single-character multi-byte Emojis.
-- The sliced boundaries are transformed directly into Semantic AST nodes (e.g. `BoldNode`, `InlineCodeNode`, `SpoilerNode`).
+This ensures that we never write "spaghetti code" string replacements. To add a new markdown feature, you simply create a new Node and add a tiny parsing plugin.
 
-### B. Fallback Tokenizer (`tokenizer.py`)
-For any unformatted plain text fragments scattered *between* the native Telegram entities, the `EntityASTBuilder` invokes the legacy state-machine `Tokenizer`.
-- The Tokenizer leverages a `ParserRegistry` to invoke block-level plugins (`ChecklistPlugin`, `HeadingPlugin`).
-- It strictly extracts block-level structures (such as `* [x] ` tasks) and translates them into semantic domain models (e.g. `TaskNode(completed=True)`).
+## 3. Session & Menu State
 
-## 3. Formatter Pipeline
+The application handles dynamic UI generation cleanly.
 
-### Telegram Rich Formatter (`telegram_rich_formatter.py`)
-Once the complete, nested `DocumentNode` AST has been constructed, it is injected into the Formatter.
+1. **Role Verification**: When a user types `/start`, the `session_handler` queries the Database (`ChannelService`) to determine if the user is an `OWNER`, `ADMIN`, or standard `USER`.
+2. **Dynamic UI Generation**: Depending on the role, the bot builds a custom `InlineKeyboardMarkup` showing only the buttons the user is allowed to access.
+3. **Session Toggling**: When the user clicks `Start Markdown Session` (or sends `/markdown`), a lightweight dictionary in `session_service.py` sets their `MARKDOWN_MODE` flag to `True`.
+4. **Isolated Parsing**: The `checklist_handler.py` strictly drops all text messages *unless* the sender's `MARKDOWN_MODE` flag is `True`. Once one message is successfully processed, the flag is automatically switched back to `False`.
 
-- The formatter implements a Visitor pattern (`_visit(node)`).
-- It recursively traverses down the AST tree and complies each generic domain node (e.g., `TaskNode`) into the strict, proprietary GitHub-flavored Markdown required by the `sendRichMessage` Telegram endpoint.
-- It automatically manages hard line breaks (enforcing `  \n` substitutions) to ensure multi-paragraph content does not syntactically collapse on Telegram mobile clients.
+## 4. Error Isolation
 
-## 4. Expansion Paradigm
-
-The Clean Architecture makes modifying or scaling features trivial:
-- **Adding new Block elements**: Create a new plugin in `parsers/blocks/`, define the Regex pattern, and register it.
-- **Adding new native Inline elements**: Inject the new Telegram `entity.type` check inside `entity_builder.py`.
-- **Targeting new platforms**: Create an entirely new formatter (e.g., `DiscordFormatter` or `HTMLFormatter`) in `formatters/` and pass the identical AST tree into it. Zero parsers need to be refactored.
+Any exception thrown within a handler is intercepted by the `GlobalErrorMiddleware`. This ensures that a malformed message from a malicious or confused user only results in a localized error reply, keeping the main `Dispatcher` polling loop alive indefinitely.

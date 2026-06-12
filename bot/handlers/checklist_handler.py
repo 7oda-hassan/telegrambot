@@ -46,10 +46,6 @@ async def handle_checklist_message(message: Message):
     if not is_markdown_mode(message.from_user.id):
         return
 
-    if os.getenv("TEST_MODE", "false").lower() == "true":
-        username_str = f" (@{message.from_user.username})" if message.from_user.username else ""
-        logger.info(f"User {message.from_user.id}{username_str} triggered a message event.")
-
     # Delegate parsing and formatting to the business logic layer
     formatted_reply = message_service.process_message(message)
     

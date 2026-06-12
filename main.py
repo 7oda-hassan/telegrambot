@@ -22,17 +22,18 @@ from bot.handlers.menu_handler import router as menu_router
 from bot.middlewares.error_middleware import GlobalErrorMiddleware
 import bot.services.database as db
 
-def get_token() -> str:
+def get_config() -> tuple[str, int]:
     """
-    Loads and validates the bot token from the environment.
+    Loads and validates required configuration from the environment.
     
     Returns:
-        str: The Telegram Bot API token.
+        tuple: (BOT_TOKEN, OWNER_ID)
         
     Raises:
-        ValueError: If the BOT_TOKEN environment variable is missing.
+        ValueError: If required variables are missing or invalid.
     """
     load_dotenv()
+    
     token = os.getenv("BOT_TOKEN")
     if not token:
         logger.critical("BOT_TOKEN is not set in the environment variables.")
@@ -42,7 +43,18 @@ def get_token() -> str:
         logger.critical("BOT_TOKEN format is invalid. It must match standard Telegram token format.")
         sys.exit(1)
         
-    return token
+    owner_id_str = os.getenv("OWNER_ID")
+    if not owner_id_str:
+        logger.critical("OWNER_ID is not set in the environment variables.")
+        sys.exit(1)
+        
+    try:
+        owner_id = int(owner_id_str)
+    except ValueError:
+        logger.critical("OWNER_ID must be a valid integer.")
+        sys.exit(1)
+        
+    return token, owner_id
 
 async def main():
     """
@@ -55,7 +67,9 @@ async def main():
     logger.info("Starting Telegram Bot...")
     db.init_db()
     
-    token = get_token()
+    token, owner_id = get_config()
+    logger.info(f"Loaded configuration. Owner ID: {owner_id}")
+    
     bot = Bot(token=token)
     dp = Dispatcher()
 

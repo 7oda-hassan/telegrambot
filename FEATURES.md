@@ -1,29 +1,52 @@
-# Feature Compatibility Matrix
+# Production Features
 
-The following table demonstrates all Rich Markdown features supported by the native Telegram ecosystem, and their implementation status within this bot.
+The Telegram Rich Markdown Bot is equipped with a clean, stable set of production features designed to provide rich content formatting and channel publishing capabilities.
 
-| Feature | Status | Notes |
-|---------|--------|-------|
-| **Headings (H1 - H6)** | Supported | Renders natively via `#` tokens. |
-| **Checklists** | Supported | Renders as interactive `TaskNode` elements. |
-| **Block Quotes** | Supported | Handled natively by Telegram payloads. |
-| **Code Blocks (Pre)** | Supported | Preserves multiline spacing and language tags. |
-| **Inline Code** | Supported | Handled natively via `code` entities. |
-| **Bold** | Supported | Handled natively via `bold` entities. |
-| **Italic** | Supported | Handled natively via `italic` entities. |
-| **Strikethrough** | Supported | Handled natively via `strikethrough` entities. |
-| **Spoiler** | Supported | Handled natively via `spoiler` entities. |
-| **Underline** | Supported | Handled natively via `underline` entities. |
-| **Standard Links** | Supported | Handled natively via `url` entities. |
-| **Inline Text Links** | Supported | Handled natively via `text_link` entities. |
-| **Email Links** | Supported | Handled natively via `email` entities. |
-| **Phone Links** | Supported | Handled natively via `phone_number` entities. |
-| **Custom Emoji** | Supported | Preserves premium Telegram emoji IDs. |
-| **User Mentions** | Supported | Handled natively by Telegram payloads. |
-| **Time Entities** | Supported | Handled natively by Telegram payloads. |
-| **Math Blocks** | Supported | Processed natively if correctly formed by client. |
-| **Tables** | Supported | Processed natively if correctly formed by client. |
-| **Footnotes** | Supported | Processed natively if correctly formed by client. |
+## 1. Rich Markdown Engine
+The core feature of the bot is converting standard text and markdown elements into native Telegram Rich Formatting.
+- **Bold**: `**text**`
+- **Italic**: `*text*`
+- **Strikethrough**: `~~text~~`
+- **Spoiler**: `||text||`
+- **Underline**: `__text__`
+- **Inline Code**: `` `text` ``
+- **Code Blocks**: ```language\n code \n```
+- **Links**: `[Text](URL)`
+- **Custom Emojis**: standard Telegram native parsing.
+- **Headings**: `# Heading 1`, `## Heading 2`
+- **Checklists**: `* [ ] Task` or `* [x] Completed Task`
 
-> [!NOTE]
-> If a payload contains an invalid media URL preventing rich message compilation, the bot features a built-in safety fallback that strips the invalid embedded images and re-renders the text payload, guaranteeing 100% message delivery reliability.
+## 2. Session Isolation (Markdown Mode)
+To ensure the bot does not accidentally trigger on standard conversational messages, parsing is locked behind a session switch.
+- Users must explicitly trigger `/markdown` (or click `Start Markdown Session` on the menu) to enter Markdown Mode.
+- Once a single markdown document is successfully parsed and a preview is generated, the bot safely drops the user back into normal conversational mode.
+- Users can manually abort a session anytime using `/cancel`.
+
+## 3. Role-Based Dynamic UI
+Upon starting the bot (`/start`), the bot analyzes the user's ID against the database to grant roles. The UI dynamically changes depending on the user.
+
+### Owner (Super Admin)
+Configured strictly via the `OWNER_ID` environment variable.
+- Access to all Markdown features.
+- Can publish content.
+- Can Add / Remove other Admins.
+- Can Add / Remove Linked Channels.
+- Can List Admins and Channels.
+
+### Admin
+Added by the Owner.
+- Access to all Markdown features.
+- Can publish content to any linked channel.
+- Can view the list of channels.
+- *Cannot modify roles or channels.*
+
+### General User
+Anyone else interacting with the bot.
+- Can ONLY use `/markdown` to format their own text.
+- *Cannot see publishing or management buttons.*
+
+## 4. Channel Publishing System
+For Owners and Admins, after a Markdown preview is successfully generated, an inline keyboard automatically appears offering to `Publish` or `Cancel`.
+- Clicking `Publish` lists all linked channels.
+- Selecting a channel instantly dispatches the formatted Rich Message to the channel.
+- Drafts are cached temporarily during this flow and destroyed after publishing.
