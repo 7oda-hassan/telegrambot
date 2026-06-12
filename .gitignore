@@ -1,0 +1,25 @@
+# Environment variables
+.env
+
+# Database
+data/
+
+# Logs
+logs/
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# Temporary scratch files
+extract*.py
+scratch_*.txt
+found_*.txt

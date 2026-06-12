@@ -1,0 +1,32 @@
+[Unit]
+Description=Telegram Rich Markdown Bot
+After=network.target
+
+[Service]
+# It is highly recommended to run the bot as a non-root user
+User=your_user
+Group=your_user
+
+# Set the working directory to the project root
+WorkingDirectory=/path/to/project
+
+# Point the environment to the virtual environment
+Environment="PATH=/path/to/project/venv/bin"
+
+# Automatically load the .env file containing BOT_TOKEN and LOG_LEVEL
+EnvironmentFile=/path/to/project/.env
+
+# The command to start the bot
+ExecStart=/path/to/project/venv/bin/python main.py
+
+# Restart policy for maximum uptime
+Restart=always
+RestartSec=5
+
+# Forward logs correctly to syslog/journald
+StandardOutput=syslog
+StandardError=syslog
+SyslogIdentifier=telegram-bot
+
+[Install]
+WantedBy=multi-user.target
